@@ -20,6 +20,7 @@
 #install.packages("ggrepel")
 # install.packages("forcats")
 # install.packages("scales)
+#install.packages("rintrojs")
 library(shiny)
 library(XLConnect)
 library(leaflet)
@@ -38,6 +39,7 @@ library(devtools)
 library(ggrepel)
 library(forcats)
 library(scales)
+library(rintrojs)
 
 #START*******************1.0 INITIALIZED DATA*******************************START
 dfcrimeOri <- readWorksheetFromFile("MalaysiaCrime.xlsx", sheet = 1)
@@ -299,6 +301,7 @@ top3 <- within(top3, Area[State == 'Sarawak'] <- 124451)
 
 # Define UI for application that draws a histogram
 ui <- bootstrapPage(
+   introjsUI(),
    
    # Application title
    #titlePanel("Mata-Mata"),
@@ -311,8 +314,11 @@ ui <- bootstrapPage(
    
    navbarPage("Malaysia Crime", 
               position = "fixed-top", inverse = TRUE, collapsible = TRUE, windowTitle = "Mata-Mata App",
-              
-              tabPanel("Exploration",
+              tabPanel(introBox(
+                "Exploration",
+                data.step = 1,
+                data.intro = "Click on the Exploration Tab and proceed to Next. This tab contains Map, Plot, Table, and Chart displays for Crime Analysis"
+              ),
                    #PLACEHOLDER FOR EXPLORATION CONTENT
                    #h3("Exploration"),
                    tabsetPanel(type = "tabs",
@@ -397,14 +403,23 @@ ui <- bootstrapPage(
                                   wellPanel(
                                     #h3("Data Filtering"),
                                     #selectInput("InputYear", "Year", seq(1980, 2016)), 
-                                    sliderInput("InputYearRange", "Year:",min = min_year, max = max_year,step=1,value=c(max_year-4,max_year), sep = ""),
+                                    introBox(
+                                      sliderInput("InputYearRange", "Year:",min = min_year, max = max_year,step=1,value=c(max_year-4,max_year), sep = ""),
+                                      data.step = 2,
+                                      data.intro = "Choose the year range by altering the slider "
+                                    ),
                                     # uncomment this line to enable Color Scheme selection
                                     # selectInput("colors", "Color Scheme",
                                     #              rownames(subset(brewer.pal.info, category %in% c("seq", "div")))),
-                                    # 
-                                    selectInput("InputCategory", "Crime Category", c("ALL", "JENAYAH HARTABENDA", "JENAYAH KEKERASAN")),
+                                    #
+                                    introBox(
+                                      selectInput("InputCategory", "Crime Category", c("ALL", "JENAYAH HARTABENDA", "JENAYAH KEKERASAN")),
+                                      data.step = 3,
+                                      data.intro = "Select crime category and observe changes"
+                                    ),
                                     conditionalPanel(condition = "input.explotabsetpanel == 'Map'", 
-                                                     checkboxInput("legend", "Show legend", TRUE)
+                                                     checkboxInput("legend", "Show legend", TRUE),
+                                                     checkboxInput("policestationcheckbox", "Show police stations", FALSE)
                                                      ),
                                     style = "opacity: 0.9"
                                   )
@@ -412,25 +427,35 @@ ui <- bootstrapPage(
                    )
                    )
               ),
-              tabPanel("Prediction",
-                       
+              tabPanel(introBox(
+                "Prediction",
+                data.step = 4,
+                data.intro = "Click on the Prediction Tab and proceed to Next. This tab contains the 5 year crime projection"
+              ),
                        h3("5 Years Crime Projection"),
                        # Sidebar with a slider input for number of bins 
                        sidebarLayout(
                          sidebarPanel(
                            #wellPanel(
                              #h3("Data Filtering"),
-                             selectInput("InputYearRangePred", label = "Start Year", choices = seq(min_year, max_year-4), selected = min_year),
+                             introBox(
+                               selectInput("InputYearRangePred", label = "Start Year", choices = seq(min_year, max_year-4), selected = min_year),
+                               data.step = 5,
+                               data.intro = "Select the start year"
+                             ),
                              #sliderInput("InputYearRangePred", "Year:",min = min_year, max = max_year,step=1,value=c(max_year-10,max_year), sep = "")
                              # Select State
-                             pickerInput("InputStatePred",
-                                         "State", 
-                                         choices = all_states, 
-                                         options = list(`actions-box` = TRUE),
-                                         selected = all_states,
-                                         multiple = T)
-                           #)
-                           , width = 2),
+                             introBox(
+                               pickerInput("InputStatePred",
+                                           "State", 
+                                           choices = all_states, 
+                                           options = list(`actions-box` = TRUE),
+                                           selected = all_states,
+                                           multiple = T),
+                               data.step = 6,
+                               data.intro = "Select the state and observe forecast changes"),
+                             #)
+                             width = 2),
                          
                          # Show a plot of the generated distribution
                          mainPanel(
@@ -438,13 +463,21 @@ ui <- bootstrapPage(
                            plotlyOutput(outputId = "predictionplot", width = "100%", height = "1000px")
                            , width = 10)
                        )
-                    )
+                    ),
+              tabPanel(
+                introBox(
+                  actionButton("help", "User Guide"),
+                  data.step = 5,
+                  data.intro = "This is a button",
+                  data.hint = "You can press me"
+                )
+              )
    )
 )
 
 
 # Define server logic required to draw a histogram
-server <- function(input, output) {
+server <- function(input, output, session) {
   
   #Filter Data -> dsFilteredData SHOULD BE USED FOR ALL OUTPUTS
   dsFilteredData <- reactive({
@@ -573,7 +606,7 @@ server <- function(input, output) {
         accessToken = Sys.getenv('MAPBOX_ACCESS_TOKEN')))%>%
       addPolygons(data=states)%>%
       addTiles()%>%
-      addMarkers(~Long, ~Lat, data=police_agg, icon = policeIcon, label = ~as.character(Stations),
+      addMarkers(~Long, ~Lat, data=police_agg, icon = policeIcon, group="policestations",label = ~as.character(Stations),
                  labelOptions = labelOptions(opacity=1, noHide = T, direction = 'top', offset=c(10,-15))) %>%
       #addCircleMarkers(data=policestations,~Long,~Lat,popup = paste("<b>District:</b>",policestations$District,
       #                                                              "</br><b>Police Stations:</b>",policestations$Number.of.police.stations,
@@ -619,6 +652,12 @@ server <- function(input, output) {
       proxy %>% addLegend(position = "bottomright",
                           pal = pal, values = ~Cases
       )
+    }
+    if(input$policestationcheckbox){
+      proxy %>% showGroup("policestations")
+    }
+    else{
+      proxy %>% hideGroup("policestations")
     }
   })
   
@@ -708,7 +747,12 @@ server <- function(input, output) {
     ggplot(top3crime(),aes(x = Crime.Cases, y = Cases, fill=Crime.Cases))+geom_bar(stat = "identity")
   })
   
-
+  observeEvent(input$help,
+               introjs(session, options = list("nextLabel"="Next",
+                                               "prevLabel"="Previous",
+                                               "skipLabel"="Done"),
+                       events = list("oncomplete"=I('alert("End")')))
+  )
     
 }
 
